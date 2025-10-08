@@ -1,0 +1,31 @@
+# PLC Reader
+reader:
+  port: "COM2"  
+  baudrate: 9600
+  timeout: 1
+  read_buffer_size: 1024
+  
+  data_processing:
+    max_retry_attempts: 5
+    retry_delay: 2 
+    connection_timeout: 10  
+    data_timeout: 5  
+    
+  # Data validation
+  validation:
+    expected_sensors: ["temperature", "pressure", "speed"]
+    min_data_length: 10  
+    max_data_length: 100  #
+    
+ 
+  storage:
+    store_last_reading: true
+    store_timestamp: true
+    max_history_size: 100  
+    data_retention_hours: 24  
+    
+    
+  health:
+    check_interval: 30  
+    max_silence_time: 10  
+    connection_retry_interval: 5  

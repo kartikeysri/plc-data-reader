@@ -1,0 +1,35 @@
+# PLC Mock Configuration
+plc:
+  # Serial port configuration
+  port: "COM1" 
+  baudrate: 9600
+  timeout: 1
+  
+  transmission_interval: 2  # seconds between data transmissions
+  
+  sensors:
+    temperature:
+      min_value: 20.0
+      max_value: 30.0
+      unit: "°C"
+      precision: 1 
+      
+    pressure:
+      min_value: 95.0
+      max_value: 105.0
+      unit: "kPa"
+      precision: 1
+      
+    speed:
+      min_value: 100.0
+      max_value: 200.0
+      unit: "RPM"
+      precision: 0  
+      
+  # Error handling 
+  error_handling:
+    max_retry_attempts: 5
+    retry_delay: 2  # seconds
+    connection_timeout: 10  # seconds
+    
+ 
