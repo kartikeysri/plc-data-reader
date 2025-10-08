@@ -1,13 +1,13 @@
 ### Overview:
 The project is PLC (programmable logic Controller) data monitoring system in which we simulate the mock PLC using virtual port and it gives live sensor reading through the Rest api.
-  •	PLC mock simulator – It creates a random sensor value for the port.
-  •	PLC reader – It is used to read the value which are generated through mock plc.
-  •	Api – Api is used a bridge to get that data to use on web dashboard.
+  -	PLC mock simulator – It creates a random sensor value for the port.
+  -	PLC reader – It is used to read the value which are generated through mock plc.
+  -	Api – Api is used a bridge to get that data to use on web dashboard.
 The user is can view:
-  •	Latest sensor reading
-  •	Health of Sensor
-  •	Record of reading (In this case only 100 entries)
-  •	Specific sensor value
+  -	Latest sensor reading
+  -	Health of Sensor
+  -	Record of reading (In this case only 100 entries)
+  -	Specific sensor value
 
 ### Install Python Dependencies
 
@@ -59,9 +59,9 @@ python main.py
 
 
 ### Known Issues/Limitations	
-•The Limit on storing the data when the large set of data will be there it will generate  the error.
-•The data is store is temporary as the program is closed all data will be reset.
-•For the huge data Database is required.
+- The Limit on storing the data when the large set of data will be there it will generate  the error.
+- The data is store is temporary as the program is closed all data will be reset.
+- For the huge data Database is required.
 
 ###  What I Learned:
 - About com0com.
