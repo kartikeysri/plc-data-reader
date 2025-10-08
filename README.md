@@ -154,8 +154,7 @@ curl http://localhost:8000/api/data/speed
 **Error Response (invalid sensor):**
 ```json
 {
-  "error": "Sensor not found",
-  "message": "Sensor 'invalid' is not available. Available sensors: temp, pressure, speed"
+    "error": "Sensor not found"
 }
 ```
 
@@ -182,7 +181,7 @@ curl http://localhost:8000/api/health
 ```json
 {
   "status": "disconnected",
-  "error": "Serial port not connected or no data received"
+  "error": "Serial port not connected"
 }
 ```
 

@@ -1,12 +1,15 @@
 import threading
 import time
-from datetime import datetime
-from typing import List
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from typing import List
 
-from plc_reader import PLCDataReader
+from plc_reader import (
+    load_config, start_plc_reader, stop_plc_reader,
+    get_last_reading, get_last_reading_timestamp, get_data_history,
+    get_connection_status
+)
 
 
 # API response models
@@ -33,57 +36,46 @@ class DataHistory(BaseModel):
     readings: List[SensorData]
     total_count: int
 
-plc_reader = None
-reader_thread = None
+
+# Global status
+plc_initialized = False
 
 
-def start_plc_reader():
-    global plc_reader, reader_thread
+def start_plc_service():
+    global plc_initialized
     
     try:
-        plc_reader = PLCDataReader("plc_reader_config.yaml")
-        
-        
-        reader_thread = threading.Thread(target=plc_reader.start, daemon=True)
+        load_config("plc_reader_config.yaml")
+        reader_thread = threading.Thread(target=start_plc_reader, daemon=True)
         reader_thread.start()
-        
-    
         time.sleep(2)
-        
-        print("PLC Reader started successfully")
-        
+        plc_initialized = True
+        print("PLC Reader started")
     except Exception as e:
         print(f"Failed to start PLC Reader: {e}")
-        plc_reader = None
+        plc_initialized = False
 
 
-
-app = FastAPI(
-    title="PLC Data Reader API",
-    description="REST API for reading sensor data from PLC via serial communication",
-    version="1.0.0"
-)
+app = FastAPI(title="PLC Data Reader API", version="1.0.0")
 
 
 @app.on_event("startup")
-async def startup_event():
-    print("Starting PLC Data Reader API...")
-    start_plc_reader()
+async def startup():
+    start_plc_service()
 
 
 @app.on_event("shutdown")
-async def shutdown_event():
-    global plc_reader
-    if plc_reader:
-        print("Stopping PLC Reader...")
-        plc_reader.stop()
+async def shutdown():
+    global plc_initialized
+    if plc_initialized:
+        stop_plc_reader()
 
 
 @app.get("/api/data", response_model=SensorData)
 async def get_latest_data():
-    global plc_reader
+    global plc_initialized
     
-    if not plc_reader:
+    if not plc_initialized:
         raise HTTPException(
             status_code=503,
             detail={
@@ -92,9 +84,7 @@ async def get_latest_data():
             }
         )
     
- 
-    last_reading = plc_reader.get_last_reading()
-    
+    last_reading = get_last_reading()
     if not last_reading:
         raise HTTPException(
             status_code=503,
@@ -103,7 +93,6 @@ async def get_latest_data():
                 "message": "Waiting for PLC data..."
             }
         )
-    
     
     return SensorData(
         temp=last_reading.temperature,
@@ -115,57 +104,25 @@ async def get_latest_data():
 
 @app.get("/api/data/{sensor_name}", response_model=SensorValue)
 async def get_specific_sensor(sensor_name: str):
-    global plc_reader
+    global plc_initialized
     
-    if not plc_reader:
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "error": "PLC Reader not initialized",
-                "message": "PLC Reader service is not available"
-            }
-        )
+    if not plc_initialized:
+        raise HTTPException(status_code=503, detail="PLC Reader not initialized")
     
-   
-    last_reading = plc_reader.get_last_reading()
-    
+    last_reading = get_last_reading()
     if not last_reading:
-        raise HTTPException(
-            status_code=404,
-            detail={
-                "error": "Sensor not found",
-                "message": "No data available for any sensor"
-            }
-        )
-    
+        raise HTTPException(status_code=404, detail="No data available")
     
     sensor_mapping = {
-        "temperature": {
-            "value": last_reading.temperature,
-            "unit": "°C"
-        },
-        "pressure": {
-            "value": last_reading.pressure,
-            "unit": "kPa"
-        },
-        "speed": {
-            "value": last_reading.speed,
-            "unit": "RPM"
-        }
+        "temperature": {"value": last_reading.temperature, "unit": "°C"},
+        "pressure": {"value": last_reading.pressure, "unit": "kPa"},
+        "speed": {"value": last_reading.speed, "unit": "RPM"}
     }
     
-    
     if sensor_name.lower() not in sensor_mapping:
-        raise HTTPException(
-            status_code=404,
-            detail={
-                "error": "Sensor not found",
-                "message": f"Sensor '{sensor_name}' is not available. Available sensors: temp, pressure, speed"
-            }
-        )
+        raise HTTPException(status_code=404, detail=f"Sensor '{sensor_name}' not found")
     
     sensor_data = sensor_mapping[sensor_name.lower()]
-    
     return SensorValue(
         value=sensor_data["value"],
         unit=sensor_data["unit"],
@@ -175,9 +132,9 @@ async def get_specific_sensor(sensor_name: str):
 
 @app.get("/api/health", response_model=HealthStatus)
 async def health_check():
-    global plc_reader
+    global plc_initialized
     
-    if not plc_reader:
+    if not plc_initialized:
         raise HTTPException(
             status_code=503,
             detail={
@@ -186,24 +143,16 @@ async def health_check():
             }
         )
     
-  
-    connection_status = plc_reader.get_connection_status()
-    last_reading = plc_reader.get_last_reading()
-    last_timestamp = plc_reader.get_last_reading_timestamp()
-    
+    connection_status = get_connection_status()
+    last_timestamp = get_last_reading_timestamp()
     
     if connection_status["is_healthy"]:
-        status = "connected"
-        last_update = last_timestamp.isoformat() if last_timestamp else None
-        data_age_seconds = connection_status.get("data_age_seconds")
-        
         return HealthStatus(
-            status=status,
-            last_update=last_update,
-            data_age_seconds=data_age_seconds
+            status="connected",
+            last_update=last_timestamp.isoformat() if last_timestamp else None,
+            data_age_seconds=connection_status.get("data_age_seconds")
         )
     else:
-       
         error_reason = "PLC connection unhealthy"
         if not connection_status["is_connected"]:
             error_reason = "Serial port not connected"
@@ -211,74 +160,43 @@ async def health_check():
             data_age = connection_status["data_age_seconds"]
             max_silence = connection_status.get("max_silence_time", 10)
             error_reason = f"No data received for {data_age:.1f} seconds (timeout: {max_silence}s)"
-        elif not last_reading:
-            error_reason = "No data received"
         
         raise HTTPException(
             status_code=503,
             detail={
                 "status": "disconnected",
-                "error": error_reason,
-                "data_age_seconds": connection_status.get("data_age_seconds"),
-                "max_silence_time": connection_status.get("max_silence_time")
+                "error": error_reason
             }
         )
+
 
 @app.get("/api/history", response_model=DataHistory)
-async def get_data_history():
-    global plc_reader
-     
-    if not plc_reader:
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "error": "PLC Reader not initialized",
-                "message": "PLC Reader service is not available"
-            }
-        )
+async def get_data_history_endpoint():
+    global plc_initialized
     
-
-    history = plc_reader.get_data_history()
+    if not plc_initialized:
+        raise HTTPException(status_code=503, detail="PLC Reader not initialized")
     
+    history = get_data_history()
     if not history:
-        raise HTTPException(
-            status_code=404,
-            detail={
-                "error": "No data history available",
-                "message": "No historical data has been collected yet"
-            }
-        )
+        raise HTTPException(status_code=404, detail="No data history available")
     
-    
-    readings = []
-    for reading in history:
-        readings.append(SensorData(
+    readings = [
+        SensorData(
             temp=reading.temperature,
             pressure=reading.pressure,
             speed=reading.speed,
             timestamp=reading.timestamp.isoformat()
-        ))
+        ) for reading in history
+    ]
     
-    return DataHistory(
-        readings=readings,
-        total_count=len(readings)
-    )
+    return DataHistory(readings=readings, total_count=len(readings))
 
 
 @app.get("/")
 async def root():
-    return {
-        "message": "PLC Data Reader API",
-        "version": "1.0.0",
-        "documentation": "/docs"
-    }
+    return {"message": "PLC Data Reader API", "version": "1.0.0", "docs": "/docs"}
 
 
 if __name__ == "__main__":
-    uvicorn.run(
-        "main:app",
-        host="127.0.0.1",
-        port=8000,
-        reload=True,
-        log_level="info"
-    )
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
